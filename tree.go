@@ -34,6 +34,19 @@ type Node interface {
 
 type Nodes []Node
 
+func New(t Nodes) Model {
+  return Model{
+    KeyMap: DefaultKeyMap(),
+    Styles: DefaultStyles(),
+    Symbols: DefaultSymbols(),
+
+    tree: t,
+
+    viewport: viewport.New(0,1),
+    focus: true,
+  }
+}
+
 func (n Nodes) at(i int) Node {
   j := 0
   for _, p := range n {
@@ -209,6 +222,39 @@ func (m *Model) currentNode() Node {
     return nil
   }
   return m.tree.at(m.cursor)
+}
+
+type Msg string
+
+func (m *Model) init() tea.Msg {
+  return Msg("initialized")
+}
+
+func (m *Model) Init() tea.Cmd {
+  return m.init
+}
+
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+  if !m.focus {
+    return m, nil
+  }
+
+  var err error
+
+  switch msg := msg.(type) {
+  case Msg:
+    return m, m.setCurrentNode(m.cursor)
+  }
+
+  if err != nil {
+    return m, erred(err)
+  }
+
+  return m, nil
+}
+
+func (m *Model) View() string {
+  return ""
 }
 
 // ToggleExpand toggles the expand state of the node pointed at by m.cursor
