@@ -217,6 +217,22 @@ func DefaultSymbols() Symbols {
   }
 }
 
+func (m *Model) setCurrentNode(cursor int) tea.Cmd {
+  if cursor != m.cursor {
+    if previous := m.currentNode(); previous != nil {
+      previous.Update(previous.State() ^ NodeSelected)
+    }
+
+    m.cursor = cursor
+  }
+
+  if current := m.currentNode(); current != nil {
+    current.Update(current.State() | NodeSelected)
+    return m.positionChanged
+  }
+  return nil
+}
+
 func (m *Model) currentNode() Node {
   if m.tree == nil || m.cursor < 0 {
     return nil
@@ -224,7 +240,34 @@ func (m *Model) currentNode() Node {
   return m.tree.at(m.cursor)
 }
 
+// SetWidth sets the width of the viewport of the tree.
+func (m *Model) SetWidth(w int) {
+  m.viewport.Width = w
+}
+
+// SetHeight sets the height of the viewport of the tree.
+func (m *Model) SetHeight(h int) {
+  m.viewport.Height = h
+}
+
+// Height returns the viewport height of the tree.
+func (m *Model) Height() int {
+  return m.viewport.Height
+}
+
+func (m *Model) Width() int {
+  return m.viewport.Width
+}
+
 type Msg string
+
+type ErrorMsg error
+
+func erred(err error) func() tea.Msg {
+  return func()tea.Msg {
+    return err
+  }
+}
 
 func (m *Model) init() tea.Msg {
   return Msg("initialized")
@@ -244,6 +287,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
   switch msg := msg.(type) {
   case Msg:
     return m, m.setCurrentNode(m.cursor)
+  case tea.WindowSizeMsg:
+    m.SetHeight(msg.Height)
   }
 
   if err != nil {
@@ -268,6 +313,10 @@ func (m *Model) ToggleExpand() {
     return
   }
   n.Update(n.State() ^ NodeCollapsed)
+}
+
+func (m *Model) positionChanged() tea.Msg {
+  return m.currentNode()
 }
 
 func isHidden(n Node) bool {
