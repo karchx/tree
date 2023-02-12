@@ -1,12 +1,14 @@
 package tree
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/truncate"
 )
 
 // NodeState is used for passing information from a Treesih element to the view itself
@@ -206,6 +208,10 @@ type Symbols struct {
   Ellipsis string
 }
 
+func (s Symbols) Padding() string {
+  return strings.Repeat(" ", s.Width)
+}
+
 func DefaultSymbols() Symbols {
   return Symbols {
     Width:            3,
@@ -240,6 +246,15 @@ func (m *Model) currentNode() Node {
   return m.tree.at(m.cursor)
 }
 
+func (m *Model) Children() Nodes {
+  return m.tree
+}
+
+//
+func (m *Model) MoveUp(n int) tea.Cmd {
+  return m.SetCursor(m.cursor - n)
+}
+
 // SetWidth sets the width of the viewport of the tree.
 func (m *Model) SetWidth(w int) {
   m.viewport.Width = w
@@ -257,6 +272,22 @@ func (m *Model) Height() int {
 
 func (m *Model) Width() int {
   return m.viewport.Width
+}
+
+func (m *Model) SetCursor(pos int) tea.Cmd {
+  cursor := clamp(pos, 0, len(m.tree.visibleNodes())-1)
+
+  yOffset := -1
+  if cursor < m.viewport.YOffset {
+    yOffset = cursor
+  }
+  if cursor > (m.viewport.YOffset + (m.viewport.Height - 1)) {
+    yOffset = cursor - m.viewport.Height + 1
+  }
+  if yOffset > -1 {
+    m.viewport.SetYOffset(yOffset)
+  }
+  return m.setCurrentNode(cursor)
 }
 
 type Msg string
@@ -289,6 +320,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
     return m, m.setCurrentNode(m.cursor)
   case tea.WindowSizeMsg:
     m.SetHeight(msg.Height)
+    m.SetWidth(msg.Width)
+    return m, m.setCurrentNode(m.cursor)
+  case tea.KeyMsg:
+    var cmd tea.Cmd
+    switch {
+    case key.Matches(msg, m.KeyMap.LineUp):
+      cmd = m.MoveUp(1)
+    }
+    return m, cmd
   }
 
   if err != nil {
@@ -299,7 +339,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) View() string {
-  return ""
+  renderedRows := m.render()
+  m.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, renderedRows...),)
+  return m.viewport.View()
 }
 
 // ToggleExpand toggles the expand state of the node pointed at by m.cursor
@@ -313,6 +355,134 @@ func (m *Model) ToggleExpand() {
     return
   }
   n.Update(n.State() ^ NodeCollapsed)
+}
+
+func getDepth(n Node) int {
+  d := 0
+  for {
+    if n == nil || n.Parent() == nil {
+      break
+    }
+    d++
+    n = n.Parent()
+  }
+  return d
+}
+
+func (m *Model) getTreeSymbolForPos(n Node, pos, maxDepth int) string {
+  if n == nil {
+    return ""
+  }
+  if !showTreeSymbolAtPos(n, pos, maxDepth) {
+    return m.Symbols.Padding()
+  }
+  if pos < maxDepth {
+    return m.Symbols.Vertical.draw(m.Symbols.Width)
+  }
+  if isLastNode(n) {
+    return m.Symbols.UpAndRight.draw(m.Symbols.Width)
+  }
+  return m.Symbols.VerticalAndRight.draw(m.Symbols.Width)
+}
+
+func showTreeSymbolAtPos(n Node, pos, maxDepth int) bool {
+  if n == nil {
+    return false
+  }
+  if pos > maxDepth {
+    return false
+  }
+  if maxDepth == pos {
+    return true
+  }
+  parentInPos := maxDepth - pos
+  for i := 0; i < parentInPos; i++ {
+    if n = n.Parent(); n == nil {
+      return false
+    }
+  }
+  return !isLastNode(n)
+}
+
+func (m *Model) drawTreeElementsForNode(t Node) string {
+  maxDepth := getDepth(t)
+
+  treeSymbolsPrefix := strings.Builder{}
+  for i := 0; i < maxDepth; i++ {
+    treeSymbolsPrefix.WriteString(m.getTreeSymbolForPos(t, i, maxDepth))
+  }
+
+  return treeSymbolsPrefix.String()
+}
+
+func (m *Model) renderNode(t Node) string {
+  if t == nil {
+    return ""
+  }
+
+  prefix := ""
+
+  name := t.View()
+  hints := t.State()
+
+  prefix = m.drawTreeElementsForNode(t)
+
+  name = truncate.StringWithTail(name, uint(m.viewport.Width-width(prefix)-1), m.Symbols.Ellipsis)
+  t.Update(hints)
+
+  render := m.Styles.Line.Width(m.Width()).Render
+  if isSelected(t) {
+    render = m.Styles.Selected.Width(m.Width()).Render
+  }
+
+  node := render(fmt.Sprintf("%s %s", prefix, name))
+
+  if isExpanded(t) && len(t.Children()) > 0 {
+    renderedChildren := m.renderNodes(t.Children())
+    node = lipgloss.JoinVertical(
+      lipgloss.Left,
+      node,
+      lipgloss.JoinVertical(lipgloss.Left, renderedChildren...),
+    )
+  }
+
+  return node
+}
+
+func (m *Model) renderNodes(nl Nodes) []string {
+  if len(nl) == 0 || len(m.tree) == 0 {
+    return nil
+  }
+
+  rendered := make([]string, 0)
+
+  for i, n := range nl {
+    if isHidden(n) {
+      continue
+    }
+
+    var hints NodeState = 0
+    if len(n.Children()) > 0 {
+      hints |= NodeCollapsible
+    }
+    if i == len(nl)-1 {
+      hints |= NodeLastChild
+    }
+    n.Update(n.State() | hints)
+    if out := m.renderNode(n); len(out) > 0 {
+      rendered = append(rendered, out)
+    }
+  }
+
+  return rendered
+}
+
+func (m *Model) render() []string {
+  if m.viewport.Height == 0 {
+    return nil
+  }
+
+  return m.renderNodes(m.Children())
 }
 
 func (m *Model) positionChanged() tea.Msg {
@@ -329,6 +499,18 @@ func isExpanded(n Node) bool {
 
 func isCollapsible(n Node) bool {
   return n.State().Is(NodeCollapsible)
+}
+
+func isLastNode(n Node) bool {
+  return n.State().Is(NodeLastChild)
+}
+
+func isSelected(n Node) bool {
+  return n.State().Is(NodeSelected)
+}
+
+func clamp(v, low, high int) int {
+  return min(high, max(low, v))
 }
 
 func max(a, b int) int {
