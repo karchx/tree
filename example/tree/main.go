@@ -23,7 +23,6 @@ type pathNode struct {
 }
 
 func (n *pathNode) Parent() tree.Node {
-
   return n.parent
 }
 
@@ -128,10 +127,9 @@ func (e *quittingTree) Update(m tea.Msg) (tea.Model, tea.Cmd) {
 	if msg, ok := m.(tea.KeyMsg); ok && key.Matches(msg, key.NewBinding(key.WithKeys("q"))) {
 		return e, tea.Quit
 	}
-	_, cmd := e.Model.Update(m)
+  _, cmd := e.Model.Update(m)
 	return e, cmd
 }
-
 
 func main() {
   var depth int

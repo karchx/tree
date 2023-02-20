@@ -1,11 +1,11 @@
-module tree
+module github.com/karchx/example/tree
 
 go 1.19
 
 require (
 	github.com/charmbracelet/bubbles v0.15.0
 	github.com/charmbracelet/bubbletea v0.23.2
-	github.com/karchx/tree v0.0.0-20230212041021-cb011d51e1f2
+	github.com/karchx/tree v0.0.0-20230212213328-deacce441cbf
 )
 
 require (

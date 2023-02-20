@@ -2,6 +2,7 @@ package tree
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -13,63 +14,6 @@ import (
 
 // NodeState is used for passing information from a Treesih element to the view itself
 type NodeState uint16
-
-type Model struct {
-  KeyMap KeyMap
-  Styles Styles
-  Symbols Symbols
-
-	focus  bool
-	cursor int
-
-	tree   Nodes
-
-	viewport viewport.Model
-}
-
-type Node interface {
-	tea.Model
-	Parent() Node
-	Children() Nodes
-	State() NodeState
-}
-
-type Nodes []Node
-
-func New(t Nodes) Model {
-  return Model{
-    KeyMap: DefaultKeyMap(),
-    Styles: DefaultStyles(),
-    Symbols: DefaultSymbols(),
-
-    tree: t,
-
-    viewport: viewport.New(0,1),
-    focus: true,
-  }
-}
-
-func (n Nodes) at(i int) Node {
-  j := 0
-  for _, p := range n {
-    if isHidden(p) {
-      continue
-    }
-    if j == i {
-      return p
-    }
-
-    if isExpanded(p) && p.Children() != nil {
-      if nn := p.Children().at(i - j - 1); nn != nil {
-        return nn
-      }
-      j += len(p.Children().visibleNodes())
-    }
-    j++
-
-  }
-  return nil
-}
 
 func (s NodeState) Is(st NodeState) bool {
 	return s&st == st
@@ -95,6 +39,61 @@ var (
 	defaultStyle         = lipgloss.NewStyle()
 	defaultSelectedStyle = defaultStyle.Reverse(true)
 )
+
+type Node interface {
+	tea.Model
+	Parent() Node
+	Children() Nodes
+	State() NodeState
+}
+
+func New(t Nodes) Model {
+  return Model{
+    KeyMap: DefaultKeyMap(),
+    Styles: DefaultStyles(),
+    Symbols: DefaultSymbols(),
+
+    tree: t,
+
+    viewport: viewport.New(0,1),
+    focus: true,
+  }
+}
+
+type Nodes []Node
+
+func (n Nodes) at(i int) Node {
+  j := 0
+  for _, p := range n {
+    if isHidden(p) {
+      continue
+    }
+    if j == i {
+      return p
+    }
+
+    if isExpanded(p) && p.Children() != nil {
+      if nn := p.Children().at(i - j - 1); nn != nil {
+        return nn
+      }
+      j += len(p.Children().visibleNodes())
+    }
+    j++
+
+  }
+  return nil
+}
+
+func (n Nodes) len() int {
+  l := 0
+  for _, node := range n {
+    l++
+    if node.Children() != nil {
+      l += node.Children().len()
+    }
+  }
+  return l
+}
 
 func (n Nodes) visibleNodes() Nodes {
   visible := make(Nodes, 0)
@@ -246,6 +245,19 @@ func (m *Model) currentNode() Node {
   return m.tree.at(m.cursor)
 }
 
+type Model struct {
+  KeyMap KeyMap
+  Styles Styles
+  Symbols Symbols
+
+	focus  bool
+	cursor int
+
+	tree   Nodes
+
+	viewport viewport.Model
+}
+
 func (m *Model) Children() Nodes {
   return m.tree
 }
@@ -253,6 +265,22 @@ func (m *Model) Children() Nodes {
 //
 func (m *Model) MoveUp(n int) tea.Cmd {
   return m.SetCursor(m.cursor - n)
+}
+
+func (m *Model) MoveDown(n int) tea.Cmd {
+  return m.SetCursor(m.cursor + n)
+}
+
+func (m *Model) GotoTop() tea.Cmd {
+	return m.SetCursor(0)
+}
+
+func (m *Model) PastBottom() bool {
+  return m.viewport.PastBottom()
+}
+
+func (m *Model) GotoBottom() tea.Cmd {
+  return m.SetCursor(m.tree.len() - 1)
 }
 
 // SetWidth sets the width of the viewport of the tree.
@@ -272,6 +300,29 @@ func (m *Model) Height() int {
 
 func (m *Model) Width() int {
   return m.viewport.Width
+}
+
+func (m *Model) YOffset() int {
+  return m.viewport.YOffset
+}
+
+func (m *Model) SetYOffset(n int) {
+  m.viewport.SetYOffset(n)
+}
+
+func (m *Model) ScrollPercent() float64 {
+  if m.viewport.Height >= len(m.tree.visibleNodes()) {
+    return 1.0
+  }
+  y := float64(m.viewport.YOffset)
+  h := float64(m.viewport.Height)
+  t := float64(len(m.tree.visibleNodes()))
+  v := y / (t - h)
+  return math.Max(0.0, math.Min(1.0, v))
+}
+
+func (m *Model) Cursor() int {
+  return m.cursor
 }
 
 func (m *Model) SetCursor(pos int) tea.Cmd {
@@ -327,6 +378,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
     switch {
     case key.Matches(msg, m.KeyMap.LineUp):
       cmd = m.MoveUp(1)
+    case key.Matches(msg, m.KeyMap.LineDown):
+      cmd = m.MoveDown(1)
+    case key.Matches(msg, m.KeyMap.PageUp):
+      cmd = m.MoveUp(m.viewport.Height)
+    case key.Matches(msg, m.KeyMap.PageDown):
+      cmd = m.MoveDown(m.viewport.Height)
+case key.Matches(msg, m.KeyMap.HalfPageUp):
+			cmd = m.MoveUp(m.viewport.Height / 2)
+		case key.Matches(msg, m.KeyMap.HalfPageDown):
+			cmd = m.MoveDown(m.viewport.Height / 2)
+		case key.Matches(msg, m.KeyMap.LineDown):
+			cmd = m.MoveDown(1)
+		case key.Matches(msg, m.KeyMap.GotoTop):
+			cmd = m.GotoTop()
+		case key.Matches(msg, m.KeyMap.GotoBottom):
+			cmd = m.GotoBottom()
+		case key.Matches(msg, m.KeyMap.Expand):
+			m.ToggleExpand()
     }
     return m, cmd
   }
@@ -342,6 +411,19 @@ func (m *Model) View() string {
   renderedRows := m.render()
   m.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, renderedRows...),)
   return m.viewport.View()
+}
+
+func (m *Model) Focused() bool {
+  return m.focus
+}
+
+func (m *Model) Focus() {
+  m.focus = true
+}
+
+func (m *Model) Blur() {
+  m.cursor = -1
+  m.focus = false
 }
 
 // ToggleExpand toggles the expand state of the node pointed at by m.cursor

@@ -14,6 +14,8 @@ github.com/containerd/console v1.0.3 h1:lIr7SlA5PxZyMV30bDW0MGbiOPXwc63yRuCP0ARu
 github.com/containerd/console v1.0.3/go.mod h1:7LqA/THxQ86k76b8c/EMSiaJ3h1eZkMkXar0TQ1gf3U=
 github.com/karchx/tree v0.0.0-20230212041021-cb011d51e1f2 h1:H/OFftguUnAJ35ouYoy5c7jnmi/+gSvIpPeBUweAsTI=
 github.com/karchx/tree v0.0.0-20230212041021-cb011d51e1f2/go.mod h1:jSKdr/zyKCgCnMYMkHt4psg+F/VAha3Y2Gnfx/lyEXo=
+github.com/karchx/tree v0.0.0-20230212213328-deacce441cbf h1:Ik7v1NpFJMGZXzKpPj3U07NLADbTArjGruvoqv9hODs=
+github.com/karchx/tree v0.0.0-20230212213328-deacce441cbf/go.mod h1:jSKdr/zyKCgCnMYMkHt4psg+F/VAha3Y2Gnfx/lyEXo=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/lucasb-eyer/go-colorful v1.2.0 h1:1nnpGOrhyZZuNyfu1QjKiUICQ74+3FNCN69Aj6K7nkY=
 github.com/lucasb-eyer/go-colorful v1.2.0/go.mod h1:R4dSotOR9KMtayYi1e77YzuveK+i7ruzyGqttikkLy0=
