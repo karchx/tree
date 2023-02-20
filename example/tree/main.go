@@ -23,6 +23,9 @@ type pathNode struct {
 }
 
 func (n *pathNode) Parent() tree.Node {
+  if n == nil || n.parent == nil {
+    return nil
+  }
   return n.parent
 }
 
@@ -35,12 +38,29 @@ const (
 	Expanded  = "⊟"
 )
 
-func (n *pathNode) Children() tree.Nodes {
-  return treeNodes(n.children)
+func (n *pathNode) View() string {
+  name := filepath.Base(n.path)
+  if n.parent == nil {
+    name = n.path
+  }
+
+  hints := n.state
+  annotation := ""
+  s := strings.Builder{} 
+
+  if hints&tree.NodeCollapsible == tree.NodeCollapsible {
+    annotation = Expanded
+    if hints&tree.NodeCollapsed == tree.NodeCollapsed {
+      annotation = Collapsed
+    }
+  }
+
+  fmt.Fprintf(&s, "%-2s%s", annotation, name)
+  return s.String()
 }
 
-func (n *pathNode) View() string {
-  return ""
+func (n *pathNode) Children() tree.Nodes {
+  return treeNodes(n.children)
 }
 
 func (n *pathNode) State() tree.NodeState {
@@ -55,6 +75,10 @@ func (n *pathNode) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
   return n, nil
 }
 
+func isUnixHiddenFile(name string) bool {
+  return len(name) > 2 && (name[0] == '.' || name[:2] == "..")
+}
+
 func buildNodeTree(root string, maxDepth int) tree.Nodes {
   allNodes := make([]*pathNode, 0)
 
@@ -67,6 +91,12 @@ func buildNodeTree(root string, maxDepth int) tree.Nodes {
   fs.WalkDir(os.DirFS(root), ".", func(p string, d fs.DirEntry, err error) error {
     if err != nil {
       return fs.SkipDir
+    }
+    if isUnixHiddenFile(d.Name()) {
+      if d.IsDir() {
+        return fs.SkipDir
+      }
+      return nil
     }
     
     cnt := len(strings.Split(p, string(os.PathSeparator)))
